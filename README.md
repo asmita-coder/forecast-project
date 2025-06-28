@@ -1,117 +1,240 @@
-# 📓 Dev Notebook – Part 0  
-## 🎯 The Forecasting Problem We're Solving (And Why It Matters)
+Hi! I’m Asmita — and in this dev notebook series, we’ll walk through how to build a real-world, production-style **forecasting pipeline**. We’ll use dummy data, but the patterns, principles, and pain points will all mirror what real forecasting systems look like.
+
+But before we dive into code or Docker or MLflow, I want to lay the groundwork — by walking you through the **key concepts behind forecasting**. If you're an ML practitioner who has only done classification or regression work, this will help you leap into time series forecasting.
 
 ---
 
-👋 Hi, I’m Asmita — welcome to my Dev Notebook series!
+## 🚀 Why Forecasting? (Very Briefly)
 
-Over the next few entries, I’ll walk you through **how to build a real-world, scalable forecasting system** — using dummy data but industry-ready techniques.
+Forecasting is one of the most practical, high-impact areas in applied machine learning.
 
-This is not just about getting a model to run.  
-It’s about building a system that can:
+It’s used to answer questions like:
+- How many units should we stock next month?
+- What will user engagement look like this quarter?
+- How will demand shift across regions next season?
 
-✅ Handle grouped time series  
-✅ Choose the best model per group automatically  
-✅ Track everything using MLflow  
-✅ Be explainable (e.g., with SHAP)  
-✅ Scale, deploy, and reproduce results easily
-
-If you're an aspiring ML Engineer, MLOps enthusiast, or someone who wants to move from notebooks to production-grade systems — you’re in the right place.
+While ML folks often start with classification or regression, forecasting introduces a unique twist: **time**. And that changes everything — from how you split your data to how you train and validate models.
 
 ---
 
-## 🧪 The Problem (Using Dummy Data)
+## 🧠 Forecasting Concepts You Should Understand
 
-We’ll simulate a common business forecasting use case:  
-**Predicting future demand for multiple products**, grouped by category.
-
-### 👇 Here’s what the data looks like:
-
-| unique_id | ds        | y     | product_category |
-|-----------|-----------|-------|------------------|
-| A         | 2024-01-01 | 120   | Electronics      |
-| A         | 2024-01-02 | 125   | Electronics      |
-| B         | 2024-01-01 | 80    | Clothing         |
-| ...       | ...       | ...   | ...              |
-
-Each row represents a **daily demand observation** for a product (`unique_id`), and belongs to a larger category (`product_category`). Our goal is to predict future `y` values (demand) for each product series.
+Let’s walk through the foundations — each explained in plain terms with practical examples.
 
 ---
-
-## 📘 Core Forecasting Concepts (Explained Simply)
 
 ### ⏱️ Forecast Horizon
-How far ahead we want to predict.
 
-> Example: If the last data point is June 1 and we want 30 days ahead,  
-> `forecast_horizon = 30`
+This is **how far into the future** you want to predict.
 
-### 🧮 Cutoff Point
-The last point in the training data.
+**Example:**  
+If your data is daily and today is June 30, and you want to forecast until July 31,  
+your **forecast horizon = 31 days**.
 
-We split the time series at a **cutoff date**. All data before it is used for training.  
-Everything after it is used to test our forecast accuracy.
+_If your time series is daily, the horizon is measured in days. If it’s weekly, it’s in weeks — and so on_
 
-### 🧩 Covariates (Features That Help Forecasting)
+| Frequency | Horizon Value | What it Means           |
+| --------- | ------------- | ----------------------- |
+| Daily     | 30            | Forecast 30 days ahead  |
+| Weekly    | 12            | Forecast 12 weeks ahead |
+| Monthly   | 6             | Forecast 6 months ahead |
 
-Covariates are extra information the model uses to understand the context.
 
-#### Static Covariates
+The length of your horizon impacts:
+- How much past data is needed
+- Which models are appropriate (e.g. some DL models struggle with long horizons)
+- How error compounds over time
+
+In our project, we’ll set the horizon upfront and design everything else to respect it.
+
+---
+
+### 🧮 Cutoff Point (a.k.a. Forecast Origin)
+
+The **cutoff** is the last date in the training data.  
+We train the model on everything before this point, then forecast **after** it.
+
+**Think of it like a snapshot in time**:  
+You freeze the data on day `T`, and the model must predict the future from that point on.
+
+This helps:
+- Separate training from evaluation
+- Simulate real-world forecasting (where you don’t know the future)
+
+We'll simulate multiple cutoff points later to evaluate our models more robustly.
+
+---
+
+### 📆 Data Frequency
+
+Forecasting is very sensitive to **time frequency** — is your data daily, weekly, monthly?
+
+- Daily: can capture short-term trends, but can be noisy
+- Weekly: often used for retail or operations
+- Monthly: common for economic indicators
+
+The **frequency must be consistent** — we’ll resample or impute if we find irregular timestamps.
+
+---
+
+### 🧩 Covariates (a.k.a. Features That Help)
+
+Covariates are **additional variables** that help models understand context.
+
+#### 🔹 Static Covariates
 - Don’t change over time
-- E.g., product type, region, seasonality category
+- Examples: product category, store type, region
 
-#### Dynamic Covariates
-- Change with each time step
-- E.g., day of week, holiday flag, promotion status
+#### 🔹 Dynamic Covariates
+- Change at every time step
+- Examples: day of week, holiday flag, temperature, promotion status
 
-**Why are they useful?**  
-They help models learn patterns — like "Mondays usually have low demand" or "Sales spike during holidays."
+These are especially helpful in:
+- Deep learning models (which learn complex interactions)
+- Situations with many related series (products, locations, etc.)
 
----
-
-## 🧱 What We'll Build (Overview)
-
-Our forecasting pipeline will include:
-
-- 🔄 **Grouped Series Handling**: Treat each product as a unique forecasting problem
-- 🧠 **Multiple Model Types**: 
-  - Statistical (AutoARIMA, ETS)
-  - Deep Learning (NHITS, NBEATSx)
-- 🧰 **Modular Forecast Engine**: Code structured for easy switching, scaling, and debugging
-- 🧾 **Experiment Tracking with MLflow**: 
-  - Track each model, its metrics, configs, and artifacts
-  - Use parent-child structure for grouped runs
-- 🧠 **Explainability**: Use SHAP to understand model predictions (especially for DL models)
-- 📦 **Packaging & Deployment**:
-  - Bundle the best models
-  - Optionally deploy with FastAPI or SageMaker
+We'll engineer both types from our dummy data.
 
 ---
 
-## 💡 Why This Matters
+### 🔁 Lag Features
 
-In the real world, forecasting isn’t just about RMSE scores.  
-It’s about **traceability, scalability, and trust**.
+Sometimes the best predictor of the future is... the past.
 
-Can you explain *why* the model made a prediction?  
-Can others reproduce your results 6 months later?  
-Can you easily switch between model types or deployment targets?
+Lag features are previous values of the target — we shift them backward in time.
 
-That’s the level we’re aiming for.
+**Example:**
+- `y(t-1)`: value one step before
+- `y(t-7)`: value a week ago
+
+Useful when there are **seasonal or autocorrelated patterns** — like demand spikes every Monday.
+
+```
+
+Time →     t-3     t-2     t-1     t     t+1     t+2
+
+Target y →  100     105     108     ?      ?       ?
+
+Lag-1  →          100     105    108      
+Lag-2  →          105     108
+Lag-3  →          108
+```
+
+We train a model like:
+
+```
+y(t) = f(y(t-1), y(t-2), y(t-3))
+
+```
+---
+
+### ♻️ Seasonality
+
+**Seasonality** is a repeating pattern over fixed time intervals.
+
+Types:
+- **Daily**: More sales at lunch and dinner time
+- **Weekly**: Weekday vs weekend patterns
+- **Yearly**: Holiday seasons, school schedules
+
+We’ll simulate weekly and monthly seasonality in our dummy data, and use models that handle it well.
 
 ---
 
-## 🚀 What’s Next?
+### 🧱 Exogenous Variables
 
-In **Part 1**, we’ll:
-- Generate a dummy dataset
-- Define our forecast horizon and cutoff
-- Engineer simple covariates
-- Visualize what we’re working with
+Sometimes you'll hear "exogenous variables" — that’s just a fancy word for **covariates that aren’t the target**.
 
-This will set us up for a clean pipeline implementation.
+They help give the model external context:
+- Weather, pricing, calendar effects
+- Macroeconomic indicators
 
-Let’s build something real — step by step.  
-See you in Part 1!
+Some models (like AutoARIMA) support these directly. Others (like DL models) can take them as inputs.
+
+---
+
+### 🧹 Missing Values & Gaps
+
+Time series data often comes with:
+- Missing timestamps (e.g., no data on holidays)
+- NaNs in the target or covariates
+- Irregular intervals
+
+You can't ignore these in forecasting — models assume regular time steps.
+
+We’ll:
+- Use imputation (forward fill, interpolation)
+- Drop incomplete series
+- Ensure regular date ranges per ID
+
+---
+
+### 🧪 Backtesting / Rolling Forecasts
+
+Unlike typical machine learning, where train/test splits are often random, forecasting relies on temporal splits — because time matters.
+
+To evaluate performance realistically, we simulate real-world conditions using **backtesting** (also called **rolling forecasts**). This involves:
+
+- Choosing a cutoff point in time
+- Training the model on data before the cutoff
+- Forecasting into the future for the next N steps
+- Repeating the process by shifting the cutoff forward
+
+
+This technique helps us assess:
+
+- Whether the model performs consistently across different time periods
+- If it overfits to one specific point in time
+- How well it adapts to
+ evolving patterns in the data
+
+We’ll implement backtesting in our pipeline.
+
+---
+
+### 📊 Forecast Evaluation Metrics
+
+Choosing the right metric matters. Common ones:
+
+| Metric | What It Measures | When to Use |
+|--------|------------------|-------------|
+| **MAE** | Average absolute error | Simple, interpretable |
+| **RMSE** | Root mean squared error | Penalizes large errors more |
+| **MAPE** | Mean absolute percentage error | Good for scale-invariant evaluation |
+| **sMAPE** | Symmetric MAPE | Handles zeros better |
+
+We’ll use a mix of these to compare models.
+
+---
+
+### 🔍 Common Forecasting Models (We'll Use Some of These Later)
+
+Here are some widely-used forecasting algorithms, both classical and deep learning:
+
+| Model | Type | Works Well For |
+|-------|------|----------------|
+| **Naive Forecast** | Baseline | Just repeats the last value |
+| **AutoARIMA** | Statistical | Trend/seasonal series |
+| **ETS** | Statistical | Captures level + trend + seasonality |
+| **Prophet** | Hybrid | User-friendly, calendar-aware |
+| **LightGBM / XGBoost** | ML | Forecasting as regression |
+| **NBEATSx / NHITS / TFT** | Deep Learning | Complex, high-variance series |
+
+We'll experiment with both classical and deep models in this series.
+
+---
+
+## 🛠️ Coming Next: Data Setup
+
+In the next notebook, we’ll:
+- Generate a dummy dataset with multiple series
+- Create group labels and covariates
+- Set a forecast horizon and cutoff
+- Visualize and inspect our training + forecasting splits
+
+This will be the foundation for building the full pipeline — from model training to logging to SHAP explainability.
+
+Let’s build something real — and let’s make it solid.  
+See you in **Dev Notebook – Part 1**.
 
 — Asmita ✨
