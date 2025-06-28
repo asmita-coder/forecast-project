@@ -1,3 +1,7 @@
+# 📓 Dev Notebook – Part 0: 
+## 🎯 The Core Concepts of Forecasting You Should Understand Before Building Anything
+---
+
 Hi! I’m Asmita — and in this dev notebook series, we’ll walk through how to build a real-world, production-style **forecasting pipeline**. We’ll use dummy data, but the patterns, principles, and pain points will all mirror what real forecasting systems look like.
 
 But before we dive into code or Docker or MLflow, I want to lay the groundwork — by walking you through the **key concepts behind forecasting**. If you're an ML practitioner who has only done classification or regression work, this will help you leap into time series forecasting.
